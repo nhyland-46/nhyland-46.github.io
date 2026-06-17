@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Historile — scoring metrics</title>
+<style>
+  :root { --line:#e5e7eb; --muted:#6b7280; --easy:#16a34a; --medium:#d97706; --hard:#dc2626; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         color:#111827; background:#f8fafc; padding:20px; }
+  h1 { margin:0 0 4px; font-size:20px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:14px; }
+  .controls { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  input[type=search]{ padding:8px 12px; border:1px solid var(--line); border-radius:9px; font-size:14px; min-width:240px; }
+  select { padding:8px; border:1px solid var(--line); border-radius:9px; font-size:14px; }
+  .count { color:var(--muted); font-size:13px; }
+  .wrap { overflow:auto; max-height:78vh; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  thead th { position:sticky; top:0; background:#f1f5f9; text-align:left; padding:9px 10px;
+             border-bottom:1px solid var(--line); cursor:pointer; white-space:nowrap; user-select:none; }
+  thead th:hover { background:#e2e8f0; }
+  th.num, td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  tbody td { padding:7px 10px; border-bottom:1px solid #f1f5f9; white-space:nowrap; }
+  tbody tr:hover { background:#f8fafc; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:700; color:#fff; }
+  .Easy { background:var(--easy);} .Medium{ background:var(--medium);} .Hard{ background:var(--hard);}
+  .Unused { background:#cbd5e1; }
+  .boost { color:var(--easy); font-weight:600; }
+  .zero { color:#cbd5e1; }
+  .name { font-weight:600; }
+  .cap { text-transform: capitalize; color:var(--muted); }
+  .arrow { font-size:10px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <h1>Historile — scoring metrics</h1>
+  <div class="sub">Final <b>fame</b> = HPI + recency boost + Anglophone boost. Rank &amp; tier reflect the fame ordering. Click a header to sort.</div>
+  <div class="controls">
+    <input id="q" type="search" placeholder="Search name / country / occupation…" />
+    <select id="tier">
+      <option value="">All tiers</option>
+      <option>Easy</option><option>Medium</option><option>Hard</option><option>Unused</option>
+    </select>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="wrap">
+    <table>
+      <thead><tr id="head"></tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+
+<script>
+const ENGLISH = new Set(["United States","United Kingdom","Ireland","Canada","Australia","New Zealand"]);
+const ANGLO_BONUS = 6, RECENCY_MAX = 8, R_START = 1900, R_FULL = 2025;
+const recency = d => d <= R_START ? 0 : Math.min((d - R_START) / (R_FULL - R_START), 1) * RECENCY_MAX;
+const fmtYear = y => y < 0 ? Math.abs(y)+" BC" : ""+y;
+
+const COLS = [
+  { k:"rank",  label:"#",          num:true,  get:r=>r.rank },
+  { k:"name",  label:"Name",       num:false, get:r=>r.name },
+  { k:"tier",  label:"Tier",       num:false, get:r=>r.tier },
+  { k:"occupation", label:"Occupation", num:false, get:r=>r.occupation||"" },
+  { k:"birthCountry", label:"Born", num:false, get:r=>r.birthCountry||"" },
+  { k:"birthYear", label:"Born yr", num:true, get:r=>r.birthYear },
+  { k:"deathYear", label:"Died",   num:true,  get:r=>r.deathYear },
+  { k:"hpi",   label:"HPI",        num:true,  get:r=>r.hpi },
+  { k:"rec",   label:"+Recency",   num:true,  get:r=>r.rec },
+  { k:"anglo", label:"+Anglo",     num:true,  get:r=>r.anglo },
+  { k:"fame",  label:"Fame",       num:true,  get:r=>r.fame },
+];
+
+let rows = [], sortKey = "rank", sortDir = 1;
+
+fetch("/src/data/figures.json").then(r=>r.json()).then(data => {
+  const n = data.length;
+  rows = data.map((f, i) => {
+    const rec = +recency(f.deathYear).toFixed(2);
+    const anglo = ENGLISH.has(f.birthCountry) ? ANGLO_BONUS : 0;
+    const tier = i < 300 ? "Easy" : i < 600 ? "Medium" : i < 900 ? "Hard" : "Unused";
+    return { ...f, rank:i+1, tier, rec, anglo, hpi:+(f.hpi).toFixed(2) };
+  });
+  renderHead(); render();
+});
+
+function renderHead(){
+  document.getElementById("head").innerHTML = COLS.map(c =>
+    `<th class="${c.num?'num':''}" data-k="${c.k}">${c.label} <span class="arrow" id="ar-${c.k}"></span></th>`
+  ).join("");
+  document.querySelectorAll("th").forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = (k==="name"||k==="occupation"||k==="birthCountry"||k==="tier")?1:-1; }
+    render();
+  });
+}
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const tf = document.getElementById("tier").value;
+  let view = rows.filter(r =>
+    (!tf || r.tier === tf) &&
+    (!q || r.name.toLowerCase().includes(q) || (r.birthCountry||"").toLowerCase().includes(q) || (r.occupation||"").toLowerCase().includes(q))
+  );
+  const col = COLS.find(c=>c.k===sortKey);
+  view.sort((a,b) => {
+    let x = col.get(a), y = col.get(b);
+    if (typeof x === "string") return x.localeCompare(y) * sortDir;
+    return ((x??-1e9) - (y??-1e9)) * sortDir;
+  });
+  COLS.forEach(c => document.getElementById("ar-"+c.k).textContent = c.k===sortKey ? (sortDir>0?"▲":"▼") : "");
+  document.getElementById("count").textContent = view.length + " of " + rows.length + " figures";
+  document.getElementById("body").innerHTML = view.map(r => `<tr>
+    <td class="num">${r.rank}</td>
+    <td class="name">${esc(r.name)}</td>
+    <td><span class="badge ${r.tier}">${r.tier}</span></td>
+    <td class="cap">${esc((r.occupation||"").toLowerCase())}</td>
+    <td>${esc(r.birthCountry||"")}</td>
+    <td class="num">${fmtYear(r.birthYear)}</td>
+    <td class="num">${fmtYear(r.deathYear)}</td>
+    <td class="num">${r.hpi.toFixed(2)}</td>
+    <td class="num ${r.rec?'boost':'zero'}">${r.rec?("+"+r.rec.toFixed(2)):"–"}</td>
+    <td class="num ${r.anglo?'boost':'zero'}">${r.anglo?("+"+r.anglo):"–"}</td>
+    <td class="num"><b>${r.fame.toFixed(2)}</b></td>
+  </tr>`).join("");
+}
+function esc(s){ return String(s).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+document.getElementById("q").oninput = render;
+document.getElementById("tier").onchange = render;
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+[watch] waiting for core write (count > 51)...
+[watch] core written: 953 figures. Killing fetch_data.py...
+[watch] starting Wikipedia-REST enrichment...
+953 figures, 953 need enrichment
+  100/953 (100 images)
+  200/953 (200 images)
+  300/953 (291 images)
+  400/953 (388 images)
+  500/953 (488 images)
+  600/953 (578 images)
+  700/953 (674 images)
+  800/953 (752 images)
+  900/953 (850 images)
+[done] 901/953 images, 904/953 wiki links
+[watch] enrichment complete.
