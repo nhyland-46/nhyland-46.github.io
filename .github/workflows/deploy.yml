@@ -28,13 +28,16 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+      - name: Move dist to historile
+        run: mv dist historile
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: historile
 
       - name: Deploy to GitHub Pages
         id: deployment
